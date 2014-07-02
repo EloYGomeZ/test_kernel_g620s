@@ -1806,13 +1806,22 @@ static int msm8x16_wcd_codec_enable_dig_clk(struct snd_soc_dapm_widget *w,
 					MSM8X16_WCD_A_ANALOG_BOOST_EN_CTL,
 					0xDF, 0xDF);
 			usleep_range(CODEC_DELAY_1_MS, CODEC_DELAY_1_1_MS);
+					MSM8X16_WCD_A_ANALOG_CURRENT_LIMIT,
+					0x83, 0x83);
+		} else {
+			snd_soc_update_bits(codec, w->reg, 1<<w->shift,
+					1<<w->shift);
 		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		if (msm8x16_wcd->rx_bias_count == 0)
 			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,
-					0x80, 0x00);
+					0x20, 0x00);
+		} else {
+			snd_soc_update_bits(codec, w->reg, 1<<w->shift, 0x00);
+		}
+		break;
 	}
 	return 0;
 }
