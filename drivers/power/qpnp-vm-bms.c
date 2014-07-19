@@ -208,6 +208,7 @@ struct bms_dt_cfg {
 #ifdef CONFIG_HUAWEI_KERNEL
 	int				cfg_resume_soc;
 #endif
+	int				cfg_soc_resume_limit;
 };
 
 struct qpnp_bms_chip {
@@ -271,6 +272,7 @@ struct qpnp_bms_chip {
 	int				iavg_samples_ma[IAVG_SAMPLES + 1];
 	int				iavg_ma;
 	int				prev_soc_uuc;
+	int				eoc_reported;
 
 	struct bms_battery_data		*batt_data;
 	struct bms_dt_cfg		dt;
@@ -617,6 +619,22 @@ static bool is_battery_present(struct qpnp_bms_chip *chip)
 
 	/* Default to false if the battery power supply is not registered. */
 	pr_debug("battery power supply is not registered\n");
+	return false;
+}
+
+static bool is_battery_taper_charging(struct qpnp_bms_chip *chip)
+{
+	union power_supply_propval ret = {0,};
+
+	if (chip->batt_psy == NULL)
+		chip->batt_psy = power_supply_get_by_name("battery");
+
+	if (chip->batt_psy) {
+		chip->batt_psy->get_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_TYPE, &ret);
+		return ret.intval == POWER_SUPPLY_CHARGE_TYPE_TAPER;
+	}
+
 	return false;
 }
 
@@ -1473,8 +1491,12 @@ static int report_eoc(struct qpnp_bms_chip *chip)
 			rc = chip->batt_psy->set_property(chip->batt_psy,
 					POWER_SUPPLY_PROP_STATUS, &ret);
 #endif
-			if (rc)
+
+			if (rc) {
 				pr_err("Unable to set 'STATUS' rc=%d\n", rc);
+				return rc;
+			}
+			chip->eoc_reported = true;
 		}
 	} else {
 		pr_err("battery psy not registered\n");
@@ -1483,10 +1505,46 @@ static int report_eoc(struct qpnp_bms_chip *chip)
 	return rc;
 }
 
+static void check_recharge_condition(struct qpnp_bms_chip *chip)
+{
+	int rc;
+	union power_supply_propval ret = {0,};
+	int status = get_battery_status(chip);
+
+	if (chip->last_soc > chip->dt.cfg_soc_resume_limit)
+		return;
+
+	if (status == POWER_SUPPLY_STATUS_UNKNOWN) {
+		pr_debug("Unable to read battery status\n");
+		return;
+	}
+
+	/* Report recharge to charger for SOC based resume of charging */
+	if ((status != POWER_SUPPLY_STATUS_CHARGING) && chip->eoc_reported) {
+		ret.intval = POWER_SUPPLY_STATUS_CHARGING;
+		rc = chip->batt_psy->set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_STATUS, &ret);
+		if (rc < 0) {
+			pr_err("Unable to set battery property rc=%d\n", rc);
+		} else {
+			pr_info("soc dropped below resume_soc soc=%d resume_soc=%d, restart charging\n",
+					chip->last_soc,
+					chip->dt.cfg_soc_resume_limit);
+			chip->eoc_reported = false;
+		}
+	}
+}
+
 static void check_eoc_condition(struct qpnp_bms_chip *chip)
 {
 	int rc;
 	int status = get_battery_status(chip);
+	union power_supply_propval ret = {0,};
+
+	if (status == POWER_SUPPLY_STATUS_UNKNOWN) {
+		pr_err("Unable to read battery status\n");
+		return;
+	}
 
 	/*
 	 * Check battery status:
@@ -1538,8 +1596,17 @@ static void check_eoc_condition(struct qpnp_bms_chip *chip)
 			chip->ocv_at_100 = chip->last_ocv_uv;
 			chip->last_soc = 100;
 		} else if (chip->last_soc != 100) {
+			/*
+			 * Report that the battery is discharging.
+			 * This gets called once when the SOC falls
+			 * below 100.
+			 */
+			ret.intval = POWER_SUPPLY_STATUS_DISCHARGING;
+			chip->batt_psy->set_property(chip->batt_psy,
+						POWER_SUPPLY_PROP_STATUS, &ret);
+
 			pr_debug("SOC dropped (%d) discarding ocv_at_100\n",
-							chip->calculated_soc);
+							chip->last_soc);
 			chip->ocv_at_100 = -EINVAL;
 		}
 	}
@@ -1797,15 +1864,10 @@ static int report_vm_bms_soc(struct qpnp_bms_chip *chip)
 	 */
 	soc = bound_soc(soc);
 	if ((soc != chip->last_soc) || (soc == 100)) {
-          if(!enter_to_poweron_flag)
-           {
-                chip->last_soc = soc;
-	        check_eoc_condition(chip);
-           }
-          else
-           {
-                enter_to_poweron_flag=false;
-           }
+		chip->last_soc = soc;
+ 		check_eoc_condition(chip);
+		if ((chip->dt.cfg_soc_resume_limit > 0) && !charging)
+			check_recharge_condition(chip);
 	}
 
 	pr_debug("last_soc=%d calculated_soc=%d soc=%d time_since_last_change=%d\n",
@@ -2000,8 +2062,9 @@ static void very_low_voltage_check(struct qpnp_bms_chip *chip, int vbat_uv)
 static void cv_voltage_check(struct qpnp_bms_chip *chip, int vbat_uv)
 {
 	if (bms_wake_active(&chip->vbms_cv_wake_source)) {
-		if (vbat_uv < (chip->dt.cfg_max_voltage_uv -
-			VBATT_ERROR_MARGIN + CV_DROP_MARGIN)) {
+		if ((vbat_uv < (chip->dt.cfg_max_voltage_uv -
+				VBATT_ERROR_MARGIN + CV_DROP_MARGIN))
+			&& !is_battery_taper_charging(chip)) {
 			pr_debug("Fell below CV, releasing cv ws\n");
 			chip->in_cv_state = false;
 			bms_relax(&chip->vbms_cv_wake_source);
@@ -2012,8 +2075,9 @@ static void cv_voltage_check(struct qpnp_bms_chip *chip, int vbat_uv)
 		}
 	} else if (!bms_wake_active(&chip->vbms_cv_wake_source)
 			&& is_battery_charging(chip)
-			&& (vbat_uv > (chip->dt.cfg_max_voltage_uv -
-					VBATT_ERROR_MARGIN))) {
+			&& ((vbat_uv > (chip->dt.cfg_max_voltage_uv -
+					VBATT_ERROR_MARGIN))
+				|| is_battery_taper_charging(chip))) {
 		pr_debug("CC_TO_CV voltage=%d holding cv ws\n", vbat_uv);
 		chip->in_cv_state = true;
 		bms_stay_awake(&chip->vbms_cv_wake_source);
@@ -4124,6 +4188,7 @@ static int parse_bms_dt_properties(struct qpnp_bms_chip *chip)
 	SPMI_PROP_READ_OPTIONAL(cfg_s3_ocv_tol_uv, "s3-ocv-tolerence-uv", rc);
 	SPMI_PROP_READ_OPTIONAL(cfg_low_soc_fifo_length,
 						"low-soc-fifo-length", rc);
+	SPMI_PROP_READ_OPTIONAL(cfg_soc_resume_limit, "resume-soc", rc);
 
 	chip->dt.cfg_ignore_shutdown_soc = of_property_read_bool(
 			chip->spmi->dev.of_node, "qcom,ignore-shutdown-soc");
