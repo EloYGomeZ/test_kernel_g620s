@@ -597,7 +597,7 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 		   atomic_read(&pdata->mclk_rsc_ref));
 	if (enable) {
 		if (!atomic_read(&pdata->mclk_rsc_ref)) {
- 			cancel_delayed_work_sync(
+			cancel_delayed_work_sync(
  					&pdata->disable_mclk_work);
  			mutex_lock(&pdata->cdc_mclk_mutex);
  			if (atomic_read(&pdata->mclk_enabled) == false) {
@@ -612,10 +612,10 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 					mutex_unlock(&pdata->cdc_mclk_mutex);
 					return ret;
 				}
-				atomic_set(&pdata->mclk_enabled, true);
-			}
-			mutex_unlock(&pdata->cdc_mclk_mutex);
-		}
+ 				atomic_set(&pdata->mclk_enabled, true);
+ 			}
+ 			mutex_unlock(&pdata->cdc_mclk_mutex);
+ 		}
 		atomic_inc(&pdata->mclk_rsc_ref);
  	} else {
  		cancel_delayed_work_sync(&pdata->disable_mclk_work);
@@ -628,7 +628,7 @@ static int msm8x16_enable_codec_ext_clk(struct snd_soc_codec *codec,
 			if (ret < 0)
 				pr_err("%s: failed to disable MCLK\n",
 						__func__);
- 			atomic_set(&pdata->mclk_enabled, false);
+			atomic_set(&pdata->mclk_enabled, false);
 		}
 		mutex_unlock(&pdata->cdc_mclk_mutex);
 	}
