@@ -79,6 +79,11 @@ static void i2c_msm_clk_path_init(struct i2c_msm_ctrl *ctrl);
 /* i2c_msm_bam_get_struct: return the bam structure
  * if not created, call i2c_msm_bam_create_struct to create it
  */
+static void i2c_msm_pm_resume_adptr(struct i2c_msm_ctrl *ctrl);
+static void i2c_msm_pm_suspend_adptr(struct i2c_msm_ctrl *ctrl);
+static int  i2c_msm_qup_init(struct i2c_msm_ctrl *ctrl);
+static int  i2c_msm_pm_resume_impl(struct device *dev);
+
 static struct i2c_msm_xfer_mode_bam *i2c_msm_bam_get_struct(
 						struct i2c_msm_ctrl *ctrl)
 {
@@ -120,10 +125,8 @@ static void i2c_msm_fifo_set_struct(struct i2c_msm_ctrl *ctrl,
 static struct i2c_msm_xfer_mode_blk *i2c_msm_blk_get_struct(
 						struct i2c_msm_ctrl *ctrl)
 {
-	void *ret_ptr = ctrl->ver.xfer_mode[I2C_MSM_XFER_MODE_BLOCK];
-	if (!ret_ptr && !i2c_msm_blk_create_struct(ctrl))
-		ret_ptr = ctrl->ver.xfer_mode[I2C_MSM_XFER_MODE_BLOCK];
-	return (struct i2c_msm_xfer_mode_blk *) ret_ptr;
+	return (struct i2c_msm_xfer_mode_blk *)
+				ctrl->ver.xfer_mode[I2C_MSM_XFER_MODE_BLOCK];
 }
 
 static void i2c_msm_blk_set_struct(struct i2c_msm_ctrl *ctrl,
@@ -1467,14 +1470,11 @@ static void i2c_msm_blk_teardown(struct i2c_msm_ctrl *ctrl) {}
 
 static void i2c_msm_blk_destroy_struct(struct i2c_msm_ctrl *ctrl)
 {
-	struct i2c_msm_xfer_mode_blk *blk = (struct i2c_msm_xfer_mode_blk *)
-				ctrl->ver.xfer_mode[I2C_MSM_XFER_MODE_BLOCK];
-	if (blk) {
-		kfree(blk->tx_cache);
-		kfree(blk->rx_cache);
-		kfree(blk);
-		i2c_msm_blk_set_struct(ctrl, NULL);
-	}
+	struct i2c_msm_xfer_mode_blk *blk = i2c_msm_blk_get_struct(ctrl);
+	kfree(blk->tx_cache);
+	kfree(blk->rx_cache);
+	kfree(blk);
+	i2c_msm_blk_set_struct(ctrl, NULL);
 }
 
 /*
@@ -2754,8 +2754,7 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 	mb();
 
 	if (err_flags & QUP_ERR_FLGS_MASK) {
-		//disable dump for i2c crash issue
-		dump_details    = false;
+		dump_details    = true;
 		signal_complete = true;
 		log_event       = true;
 	}
@@ -2783,10 +2782,10 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 			ctrl->xfer.err |= I2C_MSM_ERR_BUS_ERR;
 	}
 
+	blk = i2c_msm_blk_get_struct(ctrl);
+
 	if (xfer->mode_id == I2C_MSM_XFER_MODE_BLOCK) {
 		/*For Block Mode */
-		blk = i2c_msm_blk_get_struct(ctrl);
-
 		/* block ready for writing */
 		if (qup_op & QUP_OUTPUT_SERVICE_FLAG) {
 			log_event = true;
@@ -2843,6 +2842,7 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 		i2c_msm_dbg_qup_reg_dump(ctrl);
 	}
 
+isr_end:
 	if (dump_details || log_event || (ctrl->dbgfs.dbg_lvl >= MSM_DBG))
 		i2c_msm_prof_evnt_add(ctrl, MSM_PROF,
 					i2c_msm_prof_dump_irq_end,
@@ -2870,6 +2870,23 @@ static int i2c_msm_qup_mini_core_init(struct i2c_msm_ctrl *ctrl)
 	writel_relaxed(val | QUP_N_VAL, base + QUP_CONFIG);
 
 	return 0;
+}
+
+static int i2c_msm_qup_create_struct(struct i2c_msm_ctrl *ctrl)
+{
+	int ret = i2c_msm_bam_create_struct(ctrl);
+	if (ret)
+		return ret;
+
+	ret = i2c_msm_fifo_create_struct(ctrl);
+	if (ret)
+		i2c_msm_bam_destroy_struct(ctrl);
+
+	ret = i2c_msm_blk_create_struct(ctrl);
+	if (ret)
+		return ret;
+
+	return ret;
 }
 
 static void i2c_msm_qup_destroy_struct(struct i2c_msm_ctrl *ctrl)
