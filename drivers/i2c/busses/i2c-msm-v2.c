@@ -83,7 +83,14 @@ static void i2c_msm_pm_resume_adptr(struct i2c_msm_ctrl *ctrl);
 static void i2c_msm_pm_suspend_adptr(struct i2c_msm_ctrl *ctrl);
 static int  i2c_msm_qup_init(struct i2c_msm_ctrl *ctrl);
 static int  i2c_msm_pm_resume_impl(struct device *dev);
+static int  i2c_msm_fifo_create_struct(struct i2c_msm_ctrl *ctrl);
+static int  i2c_msm_bam_create_struct(struct i2c_msm_ctrl *ctrl);
+static int  i2c_msm_blk_create_struct(struct i2c_msm_ctrl *ctrl);
 
+
+/* i2c_msm_bam_get_struct: return the bam structure
+ * if not created, call i2c_msm_bam_create_struct to create it
+ */
 static struct i2c_msm_xfer_mode_bam *i2c_msm_bam_get_struct(
 						struct i2c_msm_ctrl *ctrl)
 {
@@ -125,8 +132,10 @@ static void i2c_msm_fifo_set_struct(struct i2c_msm_ctrl *ctrl,
 static struct i2c_msm_xfer_mode_blk *i2c_msm_blk_get_struct(
 						struct i2c_msm_ctrl *ctrl)
 {
-	return (struct i2c_msm_xfer_mode_blk *)
-				ctrl->ver.xfer_mode[I2C_MSM_XFER_MODE_BLOCK];
+	void *ret_ptr = ctrl->ver.xfer_mode[I2C_MSM_XFER_MODE_BLOCK];
+	if (!ret_ptr && !i2c_msm_blk_create_struct(ctrl))
+		ret_ptr = ctrl->ver.xfer_mode[I2C_MSM_XFER_MODE_BLOCK];
+	return (struct i2c_msm_xfer_mode_blk *) ret_ptr;
 }
 
 static void i2c_msm_blk_set_struct(struct i2c_msm_ctrl *ctrl,
@@ -1470,11 +1479,14 @@ static void i2c_msm_blk_teardown(struct i2c_msm_ctrl *ctrl) {}
 
 static void i2c_msm_blk_destroy_struct(struct i2c_msm_ctrl *ctrl)
 {
-	struct i2c_msm_xfer_mode_blk *blk = i2c_msm_blk_get_struct(ctrl);
-	kfree(blk->tx_cache);
-	kfree(blk->rx_cache);
-	kfree(blk);
-	i2c_msm_blk_set_struct(ctrl, NULL);
+	struct i2c_msm_xfer_mode_blk *blk = (struct i2c_msm_xfer_mode_blk *)
+				ctrl->ver.xfer_mode[I2C_MSM_XFER_MODE_BLOCK];
+	if (blk) {
+		kfree(blk->tx_cache);
+		kfree(blk->rx_cache);
+		kfree(blk);
+		i2c_msm_blk_set_struct(ctrl, NULL);
+	}
 }
 
 /*
@@ -2870,23 +2882,6 @@ static int i2c_msm_qup_mini_core_init(struct i2c_msm_ctrl *ctrl)
 	writel_relaxed(val | QUP_N_VAL, base + QUP_CONFIG);
 
 	return 0;
-}
-
-static int i2c_msm_qup_create_struct(struct i2c_msm_ctrl *ctrl)
-{
-	int ret = i2c_msm_bam_create_struct(ctrl);
-	if (ret)
-		return ret;
-
-	ret = i2c_msm_fifo_create_struct(ctrl);
-	if (ret)
-		i2c_msm_bam_destroy_struct(ctrl);
-
-	ret = i2c_msm_blk_create_struct(ctrl);
-	if (ret)
-		return ret;
-
-	return ret;
 }
 
 static void i2c_msm_qup_destroy_struct(struct i2c_msm_ctrl *ctrl)
