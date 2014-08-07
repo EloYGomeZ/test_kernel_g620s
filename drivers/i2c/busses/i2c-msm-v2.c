@@ -79,14 +79,10 @@ static void i2c_msm_clk_path_init(struct i2c_msm_ctrl *ctrl);
 /* i2c_msm_bam_get_struct: return the bam structure
  * if not created, call i2c_msm_bam_create_struct to create it
  */
-static void i2c_msm_pm_resume_adptr(struct i2c_msm_ctrl *ctrl);
-static void i2c_msm_pm_suspend_adptr(struct i2c_msm_ctrl *ctrl);
-static int  i2c_msm_qup_init(struct i2c_msm_ctrl *ctrl);
-static int  i2c_msm_pm_resume_impl(struct device *dev);
 static int  i2c_msm_fifo_create_struct(struct i2c_msm_ctrl *ctrl);
 static int  i2c_msm_bam_create_struct(struct i2c_msm_ctrl *ctrl);
 static int  i2c_msm_blk_create_struct(struct i2c_msm_ctrl *ctrl);
-
+static void i2c_msm_clk_path_init(struct i2c_msm_ctrl *ctrl);
 
 /* i2c_msm_bam_get_struct: return the bam structure
  * if not created, call i2c_msm_bam_create_struct to create it
@@ -2854,7 +2850,6 @@ static irqreturn_t i2c_msm_qup_isr(int irq, void *devid)
 		i2c_msm_dbg_qup_reg_dump(ctrl);
 	}
 
-isr_end:
 	if (dump_details || log_event || (ctrl->dbgfs.dbg_lvl >= MSM_DBG))
 		i2c_msm_prof_evnt_add(ctrl, MSM_PROF,
 					i2c_msm_prof_dump_irq_end,
@@ -3298,25 +3293,16 @@ static int i2c_msm_pm_xfer_start(struct i2c_msm_ctrl *ctrl)
 	/* Set xfer to active state (efectively enabling our ISR)*/
 	atomic_set(&ctrl->xfer.is_active, 1);
 
+	if (xfer->mode_id == I2C_MSM_XFER_MODE_BAM)
+		i2c_msm_bam_init(ctrl);
 	enable_irq(ctrl->rsrcs.irq);
 	return 0;
 }
 
 static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 {
-	struct i2c_msm_xfer_mode_bam *bam  = i2c_msm_bam_get_struct(ctrl);
-	struct i2c_msm_bam_pipe      *prod = &bam->pipe[I2C_MSM_BAM_PROD];
-	struct i2c_msm_bam_pipe      *cons = &bam->pipe[I2C_MSM_BAM_CONS];
-
 	/* efectively disabling our ISR */
-	disable_irq(ctrl->rsrcs.irq);
 	atomic_set(&ctrl->xfer.is_active, 0);
-
-	if (cons->is_init)
-		i2c_msm_bam_pipe_disconnect(ctrl, cons);
-	if (prod->is_init)
-		i2c_msm_bam_pipe_disconnect(ctrl, prod);
-
 	i2c_msm_pm_clk_disable_unprepare(ctrl);
 	if (pm_runtime_enabled(ctrl->dev)) {
 		pm_runtime_mark_last_busy(ctrl->dev);
@@ -3324,7 +3310,10 @@ static void i2c_msm_pm_xfer_end(struct i2c_msm_ctrl *ctrl)
 	} else {
 		i2c_msm_pm_suspend(ctrl->dev);
 	}
+
 	disable_irq(ctrl->rsrcs.irq);
+	if (ctrl->xfer.mode_id == I2C_MSM_XFER_MODE_BAM)
+		i2c_msm_bam_teardown(ctrl);
 	mutex_unlock(&ctrl->xfer.mtx);
 }
 
@@ -3746,6 +3735,51 @@ static int i2c_msm_dbgfs_clk_wrapper(struct i2c_msm_ctrl *ctrl,
 	return ret;
 }
 
+
+	ctrl->noise_rjct_sda = val;
+	return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(i2c_msm_dbgfs_noise_sda_fops,
+			i2c_msm_dbgfs_noise_sda_read,
+			i2c_msm_dbgfs_noise_sda_write,
+			"0x%llx");
+
+/*
+ * i2c_msm_dbgfs_clk_wrapper: take care of clocks before calling func
+ *
+ * this function will verify that clocks are voted for the func if that they are
+ * not. This is required for functionality which touches registers from debugfs.
+ */
+static int i2c_msm_dbgfs_clk_wrapper(struct i2c_msm_ctrl *ctrl,
+					int (*func)(struct i2c_msm_ctrl *))
+{
+	int ret;
+	pm_runtime_get_sync(ctrl->dev);
+	/*
+	 * if runtime PM callback was not invoked (when both runtime-pm
+	 * and systme-pm are in transition concurrently)
+	 */
+	if (ctrl->pwr_state != MSM_I2C_PM_ACTIVE) {
+		dev_info(ctrl->dev, "Runtime PM-callback was not invoked.\n");
+		i2c_msm_pm_resume(ctrl->dev);
+	}
+	ret = i2c_msm_pm_clk_prepare_enable(ctrl);
+	if (ret)
+		return ret;
+ 
+	ret = func(ctrl);
+
+	i2c_msm_pm_clk_disable_unprepare(ctrl);
+	if (pm_runtime_enabled(ctrl->dev)) {
+		pm_runtime_mark_last_busy(ctrl->dev);
+		pm_runtime_put_autosuspend(ctrl->dev);
+	} else {
+		i2c_msm_pm_suspend(ctrl->dev);
+	}
+	return ret;
+}
+
 static int i2c_msm_dbgfs_reg_dump(void *data, u64 val)
 {
 	struct i2c_msm_ctrl *ctrl = data;
@@ -3841,6 +3875,10 @@ static void i2c_msm_dbgfs_init(struct i2c_msm_ctrl *ctrl)
 				NULL, &ctrl->dbgfs.dbg_lvl},
 		{"xfer-force-mode", I2C_MSM_DFS_MD_RW, I2C_MSM_DFS_U8,
 				NULL, &ctrl->dbgfs.force_xfer_mode},
+		{"noise-rjct-scl",  I2C_MSM_DFS_MD_RW, I2C_MSM_DFS_FILE,
+				&i2c_msm_dbgfs_noise_scl_fops,     NULL},
+		{"noise-rjct-sda",  I2C_MSM_DFS_MD_RW, I2C_MSM_DFS_FILE,
+				&i2c_msm_dbgfs_noise_sda_fops,     NULL},
 		{"dump-regs",       I2C_MSM_DFS_MD_W, I2C_MSM_DFS_FILE,
 				&i2c_msm_dbgfs_reg_dump_fops,      NULL},
 		{"bus-clear",       I2C_MSM_DFS_MD_W, I2C_MSM_DFS_FILE,
