@@ -84,7 +84,11 @@ static void wcd_configure_cap(struct wcd_mbhc *mbhc, bool micbias2)
 	struct snd_soc_codec *codec = mbhc->codec;
 
 	micbias1 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MICB_1_EN);
+<<<<<<< HEAD
 	ad_logn("\n %s: micbias1 %x micbias2 = %d\n", __func__, micbias1,
+=======
+	pr_debug("\n %s: micbias1 %x micbias2 = %d\n", __func__, micbias1,
+>>>>>>> 2009685... ASoC: wcd: configure external bypass cap settings properly
 			micbias2);
 	if ((micbias1 & 0x80) && micbias2) {
 		if ((mbhc->micbias1_cap_mode == MICBIAS_EXT_BYP_CAP) ||
@@ -960,9 +964,11 @@ report:
 #endif
 	wcd_mbhc_find_plug_and_report(mbhc, plug_type);
 exit:
- 	wcd9xxx_spmi_unlock_sleep();
- 	pr_debug("%s: leave\n", __func__);
- }
+	micbias2 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MICB_2_EN);
+	wcd_configure_cap(mbhc, (micbias2 & 0x80));
+	wcd9xxx_spmi_unlock_sleep();
+	pr_debug("%s: leave\n", __func__);
+}
 
 /* called under codec_resource_lock acquisition */
 static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
@@ -978,6 +984,7 @@ static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 	ad_logn("%s: enter\n", __func__);
 	WCD_MBHC_RSC_ASSERT_LOCKED(mbhc);
 
+	wcd_configure_cap(mbhc, true);
 	/* Enable micbias */
 	snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_ANALOG_MICB_2_EN,
@@ -1061,6 +1068,7 @@ exit:
 
 	ad_logn("%s: Valid plug found, plug type is %d\n",
 			 __func__, plug_type);
+<<<<<<< HEAD
 
 	/* remove swap & hph type to make auto audio mmi test pass */
 #ifdef CONFIG_HUAWEI_KERNEL
@@ -1073,6 +1081,15 @@ exit:
 
 	if (plug_type == MBHC_PLUG_TYPE_HEADSET ||
 			plug_type == MBHC_PLUG_TYPE_HEADPHONE) {
+=======
+	if (plug_type != MBHC_PLUG_TYPE_HIGH_HPH &&
+			plug_type != MBHC_PLUG_TYPE_GND_MIC_SWAP &&
+			plug_type != MBHC_PLUG_TYPE_HEADSET &&
+			plug_type != MBHC_PLUG_TYPE_INVALID) {
+		wcd_configure_cap(mbhc, false);
+		wcd_mbhc_find_plug_and_report(mbhc, plug_type);
+	} else if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
+>>>>>>> 2009685... ASoC: wcd: configure external bypass cap settings properly
 		wcd_mbhc_find_plug_and_report(mbhc, plug_type);
 		wcd_schedule_hs_detect_plug(mbhc, &mbhc->correct_plug_swch);
 	} else
@@ -1726,7 +1743,10 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 			"%s: missing %s in dt node\n", __func__, gnd_switch);
 		goto err;
 	}
+<<<<<<< HEAD
 
+=======
+>>>>>>> 2009685... ASoC: wcd: configure external bypass cap settings properly
 	mbhc->micbias1_cap_mode =
 		(of_property_read_bool(card->dev->of_node, ext1_cap) ?
 		MICBIAS_EXT_BYP_CAP : MICBIAS_NO_EXT_BYP_CAP);
