@@ -78,25 +78,14 @@ MODULE_PARM_DESC(det_extn_cable_en, "enable/disable extn cable detect");
 		  "%s: BCL should have acquired\n", __func__); \
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7500e85... Revert "Revert "ASoC: wcd: configure external bypass cap settings properly""
 static void wcd_configure_cap(struct wcd_mbhc *mbhc, bool micbias2)
 {
 	u16 micbias1;
 	struct snd_soc_codec *codec = mbhc->codec;
 
 	micbias1 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MICB_1_EN);
-<<<<<<< HEAD
-<<<<<<< HEAD
-	ad_logn("\n %s: micbias1 %x micbias2 = %d\n", __func__, micbias1,
-=======
+
 	pr_debug("\n %s: micbias1 %x micbias2 = %d\n", __func__, micbias1,
->>>>>>> 2009685... ASoC: wcd: configure external bypass cap settings properly
-=======
-	pr_debug("\n %s: micbias1 %x micbias2 = %d\n", __func__, micbias1,
->>>>>>> 7500e85... Revert "Revert "ASoC: wcd: configure external bypass cap settings properly""
 			micbias2);
 	if ((micbias1 & 0x80) && micbias2) {
 		if ((mbhc->micbias1_cap_mode == MICBIAS_EXT_BYP_CAP) ||
@@ -120,11 +109,6 @@ static void wcd_configure_cap(struct wcd_mbhc *mbhc, bool micbias2)
 	}
 }
 
-<<<<<<< HEAD
-=======
->>>>>>> 5afb512... Revert "ASoC: wcd: configure external bypass cap settings properly"
-=======
->>>>>>> 7500e85... Revert "Revert "ASoC: wcd: configure external bypass cap settings properly""
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
 {
@@ -1091,13 +1075,8 @@ exit:
 	}
 #endif
 
-	if (plug_type != MBHC_PLUG_TYPE_HIGH_HPH &&
-			plug_type != MBHC_PLUG_TYPE_GND_MIC_SWAP &&
-			plug_type != MBHC_PLUG_TYPE_HEADSET &&
-			plug_type != MBHC_PLUG_TYPE_INVALID) {
-		wcd_configure_cap(mbhc, false);
-		wcd_mbhc_find_plug_and_report(mbhc, plug_type);
-	} else if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
+	if (plug_type == MBHC_PLUG_TYPE_HEADSET ||
+			plug_type == MBHC_PLUG_TYPE_HEADPHONE) {
 		wcd_mbhc_find_plug_and_report(mbhc, plug_type);
 		wcd_schedule_hs_detect_plug(mbhc, &mbhc->correct_plug_swch);
 	} else
