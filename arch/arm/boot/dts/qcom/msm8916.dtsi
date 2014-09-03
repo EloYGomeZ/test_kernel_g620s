@@ -1802,7 +1802,7 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <1>;
-		qcom,hw-settle-time = <2>;
+		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <0>;
 	};
 
@@ -1813,7 +1813,7 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <0>;
-		qcom,hw-settle-time = <2>;
+		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <0>;
 	};
 
@@ -1860,7 +1860,7 @@
 		qcom,pre-div-channel-scaling = <0>;
 		qcom,calibration-type = "ratiometric";
 		qcom,scale-function = <1>;
-		qcom,hw-settle-time = <2>;
+		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <3>;
 		qcom,btm-channel-number = <0x48>;
 	};
@@ -1872,7 +1872,7 @@
 		qcom,pre-div-channel-scaling = <1>;
 		qcom,calibration-type = "absolute";
 		qcom,scale-function = <0>;
-		qcom,hw-settle-time = <0>;
+		qcom,hw-settle-time = <0xb>;
 		qcom,fast-avg-setup = <3>;
 		qcom,btm-channel-number = <0x68>;
 	};
