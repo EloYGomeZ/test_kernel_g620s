@@ -929,7 +929,7 @@ int nfc_ioctl_core_reset_ntf(struct file *filp, unsigned int cmd,
 				unsigned long arg)
 {
 	struct qca199x_dev *qca199x_dev = filp->private_data;
-	dev_err(&qca199x_dev->client->dev,
+	dev_dbg(&qca199x_dev->client->dev,
 		"nfc_ioctl_core_reset_ntf: returning = %d\n",
 		qca199x_dev->core_reset_ntf);
 	return qca199x_dev->core_reset_ntf;
