@@ -78,6 +78,7 @@ MODULE_PARM_DESC(det_extn_cable_en, "enable/disable extn cable detect");
 		  "%s: BCL should have acquired\n", __func__); \
 }
 
+<<<<<<< HEAD
 static void wcd_configure_cap(struct wcd_mbhc *mbhc, bool micbias2)
 {
 	u16 micbias1;
@@ -112,6 +113,8 @@ static void wcd_configure_cap(struct wcd_mbhc *mbhc, bool micbias2)
 	}
 }
 
+=======
+>>>>>>> 5afb512... Revert "ASoC: wcd: configure external bypass cap settings properly"
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
 {
@@ -823,7 +826,6 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 	int pt_gnd_mic_swap_cnt = 0;
 	bool is_pa_on;
 	s16 reg;
-	u16 micbias2;
 
 	ad_logn("%s: enter\n", __func__);
 
@@ -964,8 +966,6 @@ report:
 #endif
 	wcd_mbhc_find_plug_and_report(mbhc, plug_type);
 exit:
-	micbias2 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MICB_2_EN);
-	wcd_configure_cap(mbhc, (micbias2 & 0x80));
 	wcd9xxx_spmi_unlock_sleep();
 	pr_debug("%s: leave\n", __func__);
 }
@@ -984,7 +984,6 @@ static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 	ad_logn("%s: enter\n", __func__);
 	WCD_MBHC_RSC_ASSERT_LOCKED(mbhc);
 
-	wcd_configure_cap(mbhc, true);
 	/* Enable micbias */
 	snd_soc_update_bits(codec,
 			MSM8X16_WCD_A_ANALOG_MICB_2_EN,
@@ -1068,7 +1067,6 @@ exit:
 
 	ad_logn("%s: Valid plug found, plug type is %d\n",
 			 __func__, plug_type);
-<<<<<<< HEAD
 
 	/* remove swap & hph type to make auto audio mmi test pass */
 #ifdef CONFIG_HUAWEI_KERNEL
@@ -1079,17 +1077,12 @@ exit:
 	}
 #endif
 
-	if (plug_type == MBHC_PLUG_TYPE_HEADSET ||
-			plug_type == MBHC_PLUG_TYPE_HEADPHONE) {
-=======
 	if (plug_type != MBHC_PLUG_TYPE_HIGH_HPH &&
 			plug_type != MBHC_PLUG_TYPE_GND_MIC_SWAP &&
 			plug_type != MBHC_PLUG_TYPE_HEADSET &&
-			plug_type != MBHC_PLUG_TYPE_INVALID) {
-		wcd_configure_cap(mbhc, false);
+			plug_type != MBHC_PLUG_TYPE_INVALID)
 		wcd_mbhc_find_plug_and_report(mbhc, plug_type);
-	} else if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
->>>>>>> 2009685... ASoC: wcd: configure external bypass cap settings properly
+	else if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
 		wcd_mbhc_find_plug_and_report(mbhc, plug_type);
 		wcd_schedule_hs_detect_plug(mbhc, &mbhc->correct_plug_swch);
 	} else
@@ -1131,7 +1124,7 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 				    0x30, 0x30);
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MICB_1_EN,
-				0x04, 0x04);
+				0x44, 0x44);
 		if (!mbhc->mbhc_cfg->hs_ext_micbias)
 			/* Enable Tx2 RBias if the headset
 			 * is using internal micbias*/
@@ -1168,10 +1161,6 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 		snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_MBHC_FSM_CTL,
 				0xB0, 0x00);
-		snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_ANALOG_MICB_1_EN,
-				0x04, 0x00);
-		wcd_configure_cap(mbhc, false);
 		mbhc->btn_press_intr = false;
 		if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADPHONE) {
 			wcd_mbhc_report_plug(mbhc, 0, SND_JACK_HEADPHONE);
@@ -1725,8 +1714,6 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 	struct snd_soc_card *card = codec->card;
 	const char *hph_switch = "qcom,msm-mbhc-hphl-swh";
 	const char *gnd_switch = "qcom,msm-mbhc-gnd-swh";
-	const char *ext1_cap = "qcom,msm-micbias1-ext-cap";
-	const char *ext2_cap = "qcom,msm-micbias2-ext-cap";
 
 	ad_logn("%s: enter\n", __func__);
 
@@ -1743,17 +1730,6 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 			"%s: missing %s in dt node\n", __func__, gnd_switch);
 		goto err;
 	}
-<<<<<<< HEAD
-
-=======
->>>>>>> 2009685... ASoC: wcd: configure external bypass cap settings properly
-	mbhc->micbias1_cap_mode =
-		(of_property_read_bool(card->dev->of_node, ext1_cap) ?
-		MICBIAS_EXT_BYP_CAP : MICBIAS_NO_EXT_BYP_CAP);
-
-	mbhc->micbias2_cap_mode =
-		(of_property_read_bool(card->dev->of_node, ext2_cap) ?
-		MICBIAS_EXT_BYP_CAP : MICBIAS_NO_EXT_BYP_CAP);
 
 	mbhc->in_swch_irq_handler = false;
 	mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
