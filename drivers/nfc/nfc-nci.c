@@ -26,6 +26,7 @@
 #include <linux/clk.h>
 #include <linux/of_device.h>
 #include <linux/regulator/consumer.h>
+#include <linux/pm_runtime.h>
 #include "nfc-nci.h"
 #include <mach/gpiomux.h>
 #include <linux/pm_runtime.h>
@@ -63,7 +64,7 @@ MODULE_DEVICE_TABLE(of, msm_match_table);
 #define CORE_RST_NTF_LENGTH		(0x02)
 #define WAKE_TIMEOUT			(10)
 #define WAKE_REG			(0x10)
-#define WAKEUP_SRC_TIMEOUT      (2000)
+#define WAKEUP_SRC_TIMEOUT		(2000)
 
 static void clk_req_update(struct work_struct *work);
 
