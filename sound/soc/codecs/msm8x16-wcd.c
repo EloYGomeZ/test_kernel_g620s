@@ -1696,7 +1696,7 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 			MSM8X16_WCD_A_CDC_RX3_B6_CTL, 0x01, 0x01);
 		msm8x16_wcd->mute_mask |= SPKR_PA_DISABLE;
 		/*
-		 * Add 1 ms sleep for the mute to take effect
+		 * Add sleep for 1 ms for mute to take effect
 		 */
 		usleep_range(CODEC_DELAY_1_MS, CODEC_DELAY_1_1_MS);
 		snd_soc_update_bits(codec,
@@ -1717,9 +1717,6 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 		if (msm8x16_wcd->spk_boost_set)
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_SPKR_DRV_CTL, 0xEF, 0x69);
-		else
-			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_ANALOG_SPKR_DAC_CTL, 0x10, 0x00);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		snd_soc_update_bits(codec,
@@ -1830,11 +1827,6 @@ static int msm8x16_wcd_codec_enable_dig_clk(struct snd_soc_dapm_widget *w,
 					MSM8X16_WCD_A_ANALOG_BOOST_EN_CTL,
 					0xDF, 0xDF);
 			usleep_range(CODEC_DELAY_1_MS, CODEC_DELAY_1_1_MS);
-					MSM8X16_WCD_A_ANALOG_CURRENT_LIMIT,
-					0x83, 0x83);
-		} else {
-			snd_soc_update_bits(codec, w->reg, 1<<w->shift,
-					1<<w->shift);
 		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
@@ -1842,16 +1834,6 @@ static int msm8x16_wcd_codec_enable_dig_clk(struct snd_soc_dapm_widget *w,
 			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,
 					0x80, 0x00);
-		if (msm8x16_wcd->spk_boost_set) {
-			snd_soc_update_bits(codec,
-					MSM8X16_WCD_A_ANALOG_BOOST_EN_CTL,
-					0xDF, 0x5F);
-			snd_soc_update_bits(codec,
-					MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,
-					0x20, 0x00);
-		} else {
-			snd_soc_update_bits(codec, w->reg, 1<<w->shift, 0x00);
-		}
 	}
 	return 0;
 }
