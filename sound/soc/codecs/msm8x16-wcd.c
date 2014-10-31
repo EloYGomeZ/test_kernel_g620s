@@ -1717,9 +1717,6 @@ static int msm8x16_wcd_codec_enable_spk_pa(struct snd_soc_dapm_widget *w,
 		if (msm8x16_wcd->spk_boost_set)
 			snd_soc_update_bits(codec,
 				MSM8X16_WCD_A_ANALOG_SPKR_DRV_CTL, 0xEF, 0x69);
-		else
-			snd_soc_update_bits(codec,
-				MSM8X16_WCD_A_ANALOG_SPKR_DAC_CTL, 0x10, 0x00);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		snd_soc_update_bits(codec,
@@ -1816,16 +1813,6 @@ static int msm8x16_wcd_codec_enable_dig_clk(struct snd_soc_dapm_widget *w,
 			snd_soc_update_bits(codec,
 					MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,
 					0x80, 0x00);
-		if (msm8x16_wcd->spk_boost_set) {
-			snd_soc_update_bits(codec,
-					MSM8X16_WCD_A_ANALOG_BOOST_EN_CTL,
-					0xDF, 0x5F);
-			snd_soc_update_bits(codec,
-					MSM8X16_WCD_A_DIGITAL_CDC_DIG_CLK_CTL,
-					0x20, 0x00);
-		} else {
-			snd_soc_update_bits(codec, w->reg, 1<<w->shift, 0x00);
-		}
 	}
 	return 0;
 }
